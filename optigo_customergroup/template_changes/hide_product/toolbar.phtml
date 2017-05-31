@@ -1,0 +1,164 @@
+<?php
+/**
+ * Magento
+ *
+ * NOTICE OF LICENSE
+ *
+ * This source file is subject to the Academic Free License (AFL 3.0)
+ * that is bundled with this package in the file LICENSE_AFL.txt.
+ * It is also available through the world-wide-web at this URL:
+ * http://opensource.org/licenses/afl-3.0.php
+ * If you did not receive a copy of the license and are unable to
+ * obtain it through the world-wide-web, please send an email
+ * to license@magento.com so we can send you a copy immediately.
+ *
+ * DISCLAIMER
+ *
+ * Do not edit or add to this file if you wish to upgrade Magento to newer
+ * versions in the future. If you wish to customize Magento for your
+ * needs please refer to http://www.magento.com for more information.
+ *
+ * @category    design
+ * @package     rwd_default
+ * @copyright   Copyright (c) 2006-2015 X.commerce, Inc. (http://www.magento.com)
+ * @license     http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
+ */
+?>
+<?php
+/**
+ * Product list toolbar
+ *
+ * @see Mage_Catalog_Block_Product_List_Toolbar
+ */
+?>
+
+<?php
+	//Custom code start to hide product according to customer group
+	$resource = Mage::getSingleton('core/resource'); 
+	$readConnection = $resource->getConnection('core_read'); 
+	$finalProductArr = array();
+	$customerGroupId = 0;
+	
+	$groupNameProduct = 'NOT LOGGED IN(P)';
+	if(Mage::getSingleton('customer/session')->isLoggedIn()){
+		$customerGroupId = Mage::getSingleton('customer/session')->getCustomerGroupId();
+		$groupNameProduct = Mage::getModel('customer/group')->load($customerGroupId)->getCustomerGroupCode()."(P)";
+	}
+	$groupIDQuery = "SELECT option_id FROM eav_attribute_option_value where value='$groupNameProduct';";
+	$groupIdResults = $readConnection->fetchOne($groupIDQuery);
+	$restrictedProductArr = array();
+	if (trim($groupIdResults) != "") {
+		$productIDQuery = "SELECT entity_id FROM catalog_product_entity_varchar WHERE value REGEXP CONCAT('(^|,)(".$groupIdResults.")(,|$)');";
+		$productIDResults = $readConnection->fetchAll($productIDQuery);
+		if (!empty($productIDResults)) {
+			foreach ($productIDResults as $prKey => $prVal) {
+				array_push($finalProductArr,$prVal['entity_id']);
+			}
+		}
+	}
+	//Custom code end to hide product according to customer group
+	
+	
+	//Custom code start to hide category according to customer group
+	$groupNameCategory = 'NOT LOGGED IN(C)';
+	if(Mage::getSingleton('customer/session')->isLoggedIn()){
+		$customerGroupId = Mage::getSingleton('customer/session')->getCustomerGroupId();
+		$groupNameCategory = Mage::getModel('customer/group')->load($customerGroupId)->getCustomerGroupCode()."(C)";
+	}
+	$groupIDQuery = "SELECT option_id FROM eav_attribute_option_value where value='$groupNameCategory';";
+	$groupIdResults = $readConnection->fetchOne($groupIDQuery);
+	if (trim($groupIdResults) != "") {
+		$categoryIDQuery = "SELECT entity_id FROM catalog_category_entity_varchar WHERE value REGEXP CONCAT('(^|,)(".$groupIdResults.")(,|$)');";
+		$categoryIDResults = $readConnection->fetchAll($categoryIDQuery);
+		if (!empty($categoryIDResults)) {
+			foreach ($categoryIDResults as $catKey => $catVal) {
+				$restrictedCategory = $catVal['entity_id'];
+				$category = new Mage_Catalog_Model_Category();
+				$category->load($restrictedCategory);
+				$collection = $category->getProductCollection();
+				foreach ($collection as $product) {
+					$producuID = $product->getId();
+					array_push($finalProductArr,$producuID);
+				}
+			}
+		}
+	}
+	//Custom code end to hide category according to customer group
+	$restrcitedProduct = array_unique($finalProductArr);
+	$_productCollection=$this->getCollection();
+    $searchProductResult = array();
+	foreach ($_productCollection as $_product) {
+		$productId = $_product->getId();
+		array_push($searchProductResult,$productId);
+	}
+	$arrDiff = array_diff($searchProductResult,$restrcitedProduct);
+    $prSize = count($arrDiff);
+?>
+
+
+<?php if($this->getCollection()->getSize()): ?>
+<div class="toolbar">
+    <?php if( $this->isExpanded() ): ?>
+        <div class="sorter">
+            <?php if( $this->isEnabledViewSwitcher() ): ?>
+                <p class="view-mode">
+                    <?php $_modes = $this->getModes(); ?>
+                    <?php if($_modes && count($_modes)>1): ?>
+                        <label><?php echo $this->__('View as') ?></label>
+                        <?php foreach ($this->getModes() as $_code=>$_label): ?>
+                            <?php if($this->isModeActive($_code)): ?>
+                                <strong title="<?php echo $_label ?>" class="<?php echo strtolower($_code); ?>"><?php echo $_label ?></strong>
+                            <?php else: ?>
+                                <a href="<?php echo $this->getModeUrl($_code) ?>" title="<?php echo $_label ?>" class="<?php echo strtolower($_code); ?>"><?php echo $_label ?></a>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </p>
+            <?php endif; ?>
+
+            <div class="sort-by">
+                <label><?php echo $this->__('Sort By') ?></label>
+                <select onchange="setLocation(this.value)" title="<?php echo Mage::helper('core')->quoteEscape($this->__('Sort By')) ?>">
+                    <?php foreach($this->getAvailableOrders() as $_key=>$_order): ?>
+                        <option value="<?php echo $this->getOrderUrl($_key, 'asc') ?>"<?php if($this->isOrderCurrent($_key)): ?> selected="selected"<?php endif; ?>>
+                            <?php echo $this->__($_order) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if($this->getCurrentDirection() == 'desc'): ?>
+                    <a href="<?php echo $this->getOrderUrl(null, 'asc') ?>" class="sort-by-switcher sort-by-switcher--desc" title="<?php echo Mage::helper('core')->quoteEscape($this->__('Set Ascending Direction')) ?>"><?php echo $this->__('Set Ascending Direction') ?></a>
+                <?php else: ?>
+                    <a href="<?php echo $this->getOrderUrl(null, 'desc') ?>" class="sort-by-switcher sort-by-switcher--asc" title="<?php echo Mage::helper('core')->quoteEscape($this->__('Set Descending Direction')) ?>"><?php echo $this->__('Set Descending Direction') ?></a>
+                <?php endif; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+    <div class="pager">
+        <div class="count-container">
+            <?php if($this->getLastPageNum()>1): ?>
+                <p class="amount amount--has-pages">
+                    <?php echo $this->__('%s-%s of %s', $this->getFirstNum(), $this->getLastNum(), $this->getTotalNum()) ?>
+                </p>
+            <?php else: ?>
+                <p class="amount amount--no-pages">
+                    <strong><?php echo $this->__('%s Item(s)', $prSize) ?></strong>
+                </p>
+            <?php endif; ?>
+
+            <div class="limiter">
+                <label><?php echo $this->__('Show') ?></label>
+                <select onchange="setLocation(this.value)" title="<?php echo Mage::helper('core')->quoteEscape($this->__('Results per page')); ?>">
+                <?php foreach ($this->getAvailableLimit() as  $_key=>$_limit): ?>
+                    <option value="<?php echo $this->getLimitUrl($_key) ?>"<?php if($this->isLimitCurrent($_key)): ?> selected="selected"<?php endif ?>>
+                        <?php echo $_limit ?>
+                    </option>
+                <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
+
+        <?php echo $this->getPagerHtml() ?>
+
+    </div>
+</div>
+<?php endif ?>
